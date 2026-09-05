@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import Image from "next/image";
-
-import GameCard from "./components/GameCard";
 import playstationLogo from "../img/NicePng_ps4-logo-png_61508.png";
 import playstationWordmark from "../img/priceforgeps.png";
 import xboxLogo from "../img/NicePng_xbox-logo-png_9962.png";
@@ -80,6 +78,7 @@ const games = {
 export default function Home() {
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState<"xbox" | "playstation">("xbox");
+  const [selectedGame, setSelectedGame] = useState(null);
 
   const platformGames = games[platform];
   const isXbox = platform === "xbox";
@@ -188,39 +187,115 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Featured Games */}
-      <section id="games" className={`mx-auto max-w-7xl px-5 sm:px-8 ${search.trim() ? "pb-24" : ""}`}>
-        {search.trim() && (filteredGames.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredGames.map((game) => (
-              <GameCard
-                key={game.id}
-                title={game.title}
-                platform={game.platform}
-                price={game.price}
-                originalPrice={game.originalPrice}
-                discount={game.discount}
-                rating={game.rating}
-                lowestPrice={game.lowestPrice}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-10 rounded-3xl border border-white/[0.08] bg-white/[0.025] px-6 py-16 text-center">
-            <h3 className="text-xl font-semibold text-white">
-              No games found
-            </h3>
+      {/* Search Results */}
+      {search.trim() && (
+        <section className="relative z-20 mx-auto -mt-14 w-full max-w-md px-5 sm:px-8">
+          {filteredGames.length > 0 ? (
+            <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111313] shadow-2xl">
+              {filteredGames.map((game) => (
+                <button
+                  key={game.id}
+                  onClick={() => setSelectedGame(game)}
+                  className="flex w-full items-center justify-between border-b border-white/[0.06] px-5 py-4 text-left transition last:border-b-0 hover:bg-white/[0.05]"
+                >
+                  <div>
+                    <p className="font-medium text-white">
+                      {game.title}
+                    </p>
 
-            <p className="mt-2 text-zinc-500">
-              We couldn&apos;t find any games matching &quot;{search}&quot;.
-            </p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {game.platform}
+                    </p>
+                  </div>
 
-            <p className="mt-1 text-sm text-zinc-600">
-              Try searching for a different title.
-            </p>
+                  <span className="text-sm font-medium text-zinc-400">
+                    {game.price}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/[0.08] bg-[#111313] px-5 py-6 text-center shadow-2xl">
+              <p className="text-sm text-zinc-400">
+                No games found
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Game Details */}
+      {selectedGame && (
+        <section className="mx-auto mt-10 max-w-4xl px-5 sm:px-8">
+          <div className="rounded-3xl border border-white/[0.08] bg-[#111313] p-6 shadow-2xl sm:p-8">
+            <div className="grid gap-8 sm:grid-cols-[220px_1fr]">
+
+              {/* Game Artwork */}
+              <div className="flex aspect-[2/3] items-center justify-center rounded-2xl bg-zinc-900">
+                <p className="text-sm text-zinc-600">
+                  GAME ART
+                </p>
+              </div>
+
+              {/* Game Information */}
+              <div className="flex flex-col justify-center">
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                  {selectedGame.platform}
+                </p>
+
+                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
+                  {selectedGame.title}
+                </h2>
+
+                <div className="mt-8">
+                  <p className="text-4xl font-bold text-white">
+                    {selectedGame.price}
+                  </p>
+
+                  <div className="mt-1 flex items-center gap-3">
+                    <p className="text-sm text-zinc-500 line-through">
+                      {selectedGame.originalPrice}
+                    </p>
+
+                    <p className="text-sm font-semibold text-green-400">
+                      {selectedGame.discount}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-8 rounded-2xl bg-zinc-900 px-5 py-4">
+                  <p className="font-medium text-white">
+                    🟢 {selectedGame.rating}
+                  </p>
+                </div>
+
+                <div className="mt-6 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-zinc-600">
+                      Lowest ever
+                    </p>
+
+                    <p className="mt-1 font-medium text-white">
+                      {selectedGame.lowestPrice}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-zinc-600">
+                      Average price
+                    </p>
+
+                    <p className="mt-1 font-medium text-white">
+                      £24.50
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
-        ))}
-      </section>
+        </section>
+      )}
 
     </main>
   );
