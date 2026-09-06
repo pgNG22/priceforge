@@ -88,10 +88,12 @@ const buyVerdicts = [
   { verdict: "Based on recent price trends, this is the perfect time to buy", color: "text-green-400" },
 ];
 
+type Game = (typeof games.xbox)[number];
+
 export default function Home() {
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState<"xbox" | "playstation">("xbox");
-  const [selectedGame, setSelectedGame] = useState(null);
+  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
   const platformGames = games[platform];
   const isXbox = platform === "xbox";
@@ -138,7 +140,7 @@ export default function Home() {
         </div>
 
         {/* Platform Selector */}
-        <div className="relative mt-10 flex w-full max-w-md rounded-xl border border-white/[0.09] bg-white/[0.035] p-1.5 shadow-2xl shadow-black/20">
+        <div className="relative mt-10 flex w-full max-w-md rounded-xl border border-[rgba(var(--accent-rgb),0.35)] bg-white/[0.035] p-1.5 shadow-[0_0_24px_rgba(var(--accent-rgb),0.08)] transition-colors duration-500">
           <button
             onClick={() => setPlatform("xbox")}
             className={`flex flex-1 items-center justify-center gap-2.5 rounded-xl px-4 py-4 text-sm font-semibold transition-all duration-300 ${
@@ -240,7 +242,7 @@ export default function Home() {
       {/* Game Details */}
       {selectedGame && (
         <section className="mx-auto mt-10 max-w-4xl px-5 sm:px-8">
-          <div className="rounded-3xl border border-white/[0.08] bg-[#111313] p-6 shadow-2xl sm:p-8">
+          <div className="rounded-3xl border border-[rgba(var(--accent-rgb),0.3)] bg-[#111313] p-6 shadow-[0_0_30px_rgba(var(--accent-rgb),0.07)] transition-colors duration-500 sm:p-8">
             <div className="grid gap-8 sm:grid-cols-[220px_1fr]">
 
               {/* Game Artwork */}
@@ -313,7 +315,7 @@ export default function Home() {
       {/* Price History */}
       {selectedGame && (
         <section className="mx-auto mt-6 max-w-4xl px-5 sm:px-8">
-        <div className="rounded-3xl border border-white/[0.08] bg-[#111313] p-6 shadow-2xl sm:p-8">
+        <div className="rounded-3xl border border-[rgba(var(--accent-rgb),0.3)] bg-[#111313] p-6 shadow-[0_0_30px_rgba(var(--accent-rgb),0.07)] transition-colors duration-500 sm:p-8">
 
           <div className="flex items-center justify-between">
             <div>
