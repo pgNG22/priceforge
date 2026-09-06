@@ -75,6 +75,19 @@ const games = {
   ],
 };
 
+const priceHistory = [
+  { date: "Apr", price: 34.99 },
+  { date: "May", price: 29.99 },
+  { date: "Jun", price: 39.99 },
+  { date: "Jul", price: 24.99 },
+  { date: "Aug", price: 21.99 },
+  { date: "Sep", price: 19.99 },
+];
+
+const buyVerdicts = [
+  { verdict: "Based on recent price trends, this is the perfect time to buy", color: "text-green-400" },
+];
+
 export default function Home() {
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState<"xbox" | "playstation">("xbox");
@@ -296,6 +309,130 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      {/* Price History */}
+      {selectedGame && (
+        <section className="mx-auto mt-6 max-w-4xl px-5 sm:px-8">
+        <div className="rounded-3xl border border-white/[0.08] bg-[#111313] p-6 shadow-2xl sm:p-8">
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                Price History
+              </p>
+
+              <h3 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+                Price over time
+              </h3>
+            </div>
+
+            <div className="text-right">
+              <p className="text-xs text-zinc-600">
+                Current price
+              </p>
+
+              <p className="mt-1 text-lg font-semibold text-white">
+                {selectedGame.price}
+              </p>
+            </div>
+          </div>
+
+            <div className="mt-8 h-72 rounded-2xl bg-zinc-900 p-4">
+              <svg
+                viewBox="0 0 600 240"
+                className="h-full w-full"
+                preserveAspectRatio="none"
+              >
+                {/* Horizontal guide lines */}
+                {[0, 1, 2, 3, 4].map((line) => {
+                  const y = 200 - line * 40;
+
+                  return (
+                    <line
+                      key={line}
+                      x1="40"
+                      y1={y}
+                      x2="580"
+                      y2={y}
+                      stroke="rgba(255,255,255,0.06)"
+                      strokeWidth="1"
+                    />
+                  );
+                })}
+
+                {/* Price line */}
+                <polyline
+                  points={priceHistory
+                    .map((point, index) => {
+                      const x = 40 + index * 108;
+                      const y = 200 - (point.price / 40) * 160;
+
+                      return `${x},${y}`;
+                    })
+                    .join(" ")}
+                  fill="none"
+                  stroke="var(--accent)"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                {/* Price points */}
+                {priceHistory.map((point, index) => {
+                  const x = 40 + index * 108;
+                  const y = 200 - (point.price / 40) * 160;
+
+                  return (
+                    <circle
+                      key={point.date}
+                      cx={x}
+                      cy={y}
+                      r="5"
+                      fill="var(--accent)"
+                    />
+                  );
+                })}
+
+                {/* Date labels */}
+                {priceHistory.map((point, index) => {
+                  const x = 40 + index * 108;
+
+                  return (
+                    <text
+                      key={point.date}
+                      x={x}
+                      y="225"
+                      textAnchor="middle"
+                      fill="rgba(255,255,255,0.35)"
+                      fontSize="11"
+                    >
+                      {point.date}
+                    </text>
+                  );
+                })}
+              </svg>
+            </div>
+          </div>
+      </section>
+      )}
+
+        {/* Buy Verdicts */}
+        {selectedGame && (
+          <section className="mx-auto mt-6 max-w-4xl px-5 pb-10 sm:px-8">
+            <div className="rounded-3xl border border-white/[0.08] bg-[#111313] p-6 shadow-2xl sm:p-8">
+
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                Verdict / AI Analysis
+              </p>
+
+              <p className={`mt-3 text-sm font-medium ${buyVerdicts[0].color}`}>
+                {buyVerdicts[0].verdict}
+              </p>
+
+            </div>
+          </section>
+        )}
+
 
     </main>
   );
