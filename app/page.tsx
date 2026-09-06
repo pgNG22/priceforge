@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import playstationLogo from "../img/NicePng_ps4-logo-png_61508.png";
 import playstationWordmark from "../img/priceforgeps.png";
@@ -93,15 +93,70 @@ type Game = (typeof games.xbox)[number];
 export default function Home() {
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState<"xbox" | "playstation">("xbox");
-  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+  const [selectedGame, setSelectedGame] = useState<any | null>(null);
+
+  const [xboxGames, setXboxGames] = useState<any[]>([]);
+  const [isSearchingXbox, setIsSearchingXbox] = useState(false);
+
 
   const platformGames = games[platform];
+
   const isXbox = platform === "xbox";
   const priceForgeLogo = isXbox ? xboxWordmark : playstationWordmark;
 
-  const filteredGames = platformGames.filter((game) =>
-    game.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredGames =
+    platform === "xbox" && search.trim()
+      ? xboxGames
+      : platformGames.filter((game) =>
+          game.title.toLowerCase().includes(search.toLowerCase())
+        );
+
+
+
+  useEffect(() => {
+    if (platform !== "xbox" || !search.trim()) {
+      setXboxGames([]);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const searchXbox = async () => {
+      try {
+        setIsSearchingXbox(true);
+
+        const response = await fetch(
+          `/api/xbox/search?q=${encodeURIComponent(search)}`,
+          {
+            signal: controller.signal,
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Xbox search failed");
+        }
+
+        const data = await response.json();
+
+        setXboxGames(data.games ?? []);
+      } catch (error: any) {
+        if (error.name !== "AbortError") {
+          console.error("Xbox search failed:", error);
+          setXboxGames([]);
+        }
+      } finally {
+        setIsSearchingXbox(false);
+      }
+    };
+
+  const timeout = setTimeout(searchXbox, 300);
+
+  return () => {
+    clearTimeout(timeout);
+    controller.abort();
+  };
+}, [search, platform]);
+
 
   return (
     <main className={`min-h-screen overflow-hidden bg-[#090a0a] text-white ${isXbox ? "[--accent:#c8f56a] [--accent-rgb:200,245,106]" : "[--accent:#70a7ff] [--accent-rgb:112,167,255]"}`}>
@@ -205,7 +260,13 @@ export default function Home() {
       {/* Search Results */}
       {search.trim() && (
         <section className="relative z-20 mx-auto -mt-14 w-full max-w-md px-5 sm:px-8">
-          {filteredGames.length > 0 ? (
+          {isSearchingXbox && platform === "xbox" ? (
+            <div className="rounded-2xl border border-white/[0.08] bg-[#111313] px-5 py-6 text-center shadow-2xl">
+              <p className="text-sm text-zinc-500">
+                Searching Xbox Store...
+              </p>
+            </div>
+          ) : filteredGames.length > 0 ? (
             <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111313] shadow-2xl">
               {filteredGames.map((game) => (
                 <button
@@ -214,13 +275,41 @@ export default function Home() {
                   className="flex w-full items-center justify-between border-b border-white/[0.06] px-5 py-4 text-left transition last:border-b-0 hover:bg-white/[0.05]"
                 >
                   <div>
-                    <p className="font-medium text-white">
-                      {game.title}
+                   <div className="flex items-center gap-3">
+                    {game.image && (
+                      <div className="relative h-12 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-900">
+                        <Image
+                          src={game.image}
+                          alt=""
+                          fill
+                          className="object-cover"
+                          sizes="36px"
+                        />
+                      </div>
+                    )}
+
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">
+                        {game.title}
+                      </p>
+
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {game.platform}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="ml-4 shrink-0 text-right">
+                    <p className="text-sm font-semibold text-white">
+                      £{game.price.toFixed(2)}
                     </p>
 
-                    <p className="mt-1 text-xs text-zinc-500">
-                      {game.platform}
-                    </p>
+                    {game.discount > 0 && (
+                      <p className="mt-1 text-xs font-medium text-green-400">
+                        -{game.discount}%
+                      </p>
+                    )}
+                  </div>
                   </div>
 
                   <span className="text-sm font-medium text-zinc-400">
@@ -246,10 +335,22 @@ export default function Home() {
             <div className="grid gap-8 sm:grid-cols-[220px_1fr]">
 
               {/* Game Artwork */}
-              <div className="flex aspect-[2/3] items-center justify-center rounded-2xl bg-zinc-900">
-                <p className="text-sm text-zinc-600">
-                  GAME ART
-                </p>
+              <div className="relative aspect-[15/15] overflow-hidden rounded-2xl bg-zinc-900">
+                {selectedGame.image ? (
+                  <Image
+                    src={selectedGame.image}
+                    alt={selectedGame.title}
+                    fill
+                    className="object-cover"
+                    sizes="220px"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <p className="text-sm text-zinc-600">
+                      No artwork
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Game Information */}
@@ -264,16 +365,16 @@ export default function Home() {
 
                 <div className="mt-8">
                   <p className="text-4xl font-bold text-white">
-                    {selectedGame.price}
+                    £{selectedGame.price.toFixed(2)}
                   </p>
 
                   <div className="mt-1 flex items-center gap-3">
                     <p className="text-sm text-zinc-500 line-through">
-                      {selectedGame.originalPrice}
+                      £{selectedGame.originalPrice.toFixed(2)}
                     </p>
 
                     <p className="text-sm font-semibold text-green-400">
-                      {selectedGame.discount}
+                      -{selectedGame.discount}%
                     </p>
                   </div>
                 </div>
@@ -291,17 +392,21 @@ export default function Home() {
                     </p>
 
                     <p className="mt-1 font-medium text-white">
-                      {selectedGame.lowestPrice}
+                    {selectedGame.lowestPrice !== null
+                      ? `£${selectedGame.lowestPrice.toFixed(2)}`
+                      : "N/A"}
                     </p>
                   </div>
 
                   <div>
                     <p className="text-xs text-zinc-600">
-                      Average price
+                      Current discount
                     </p>
 
                     <p className="mt-1 font-medium text-white">
-                      £24.50
+                      {selectedGame.discount > 0
+                        ? `${selectedGame.discount}% off`
+                        : "No discount"}
                     </p>
                   </div>
                 </div>
