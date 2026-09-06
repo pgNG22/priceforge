@@ -99,17 +99,21 @@ export default function Home() {
   const [isSearchingXbox, setIsSearchingXbox] = useState(false);
 
 
-  const platformGames = games[platform];
+ const platformGames = games[platform];
 
   const isXbox = platform === "xbox";
   const priceForgeLogo = isXbox ? xboxWordmark : playstationWordmark;
 
   const filteredGames =
     platform === "xbox" && search.trim()
-      ? xboxGames
-      : platformGames.filter((game) =>
-          game.title.toLowerCase().includes(search.toLowerCase())
-        );
+      ? xboxGames.slice(0, 8)
+      : platformGames
+          .filter((game) =>
+            game.title
+              .toLowerCase()
+              .includes(search.toLowerCase())
+          )
+          .slice(0, 8);
 
 
 
@@ -125,23 +129,255 @@ export default function Home() {
       try {
         setIsSearchingXbox(true);
 
-        const response = await fetch(
-          `/api/xbox/search?q=${encodeURIComponent(search)}`,
+        // ─────────────────────────────
+        // STEP 1
+        // Get Microsoft's autosuggest results
+        // ─────────────────────────────
+
+        const suggestResponse = await fetch(
+          `/api/xbox/suggest?q=${encodeURIComponent(search)}`,
           {
             signal: controller.signal,
           }
         );
 
-        if (!response.ok) {
-          throw new Error("Xbox search failed");
+        if (!suggestResponse.ok) {
+          throw new Error("Xbox suggestion search failed");
         }
 
-        const data = await response.json();
+        const suggestData =
+          await suggestResponse.json();
 
-        setXboxGames(data.games ?? []);
+        const suggestions =
+          suggestData.games ?? [];
+
+        // ─────────────────────────────
+        // STEP 2
+        // Search the broader Xbox catalogue
+        // ─────────────────────────────
+
+        const catalogueResponse = await fetch(
+          `/api/xbox/catalogue?q=${encodeURIComponent(search)}`,
+          {
+            signal: controller.signal,
+          }
+        );
+
+        if (!catalogueResponse.ok) {
+          throw new Error("Xbox catalogue search failed");
+        }
+
+        const catalogueData =
+          await catalogueResponse.json();
+
+        const catalogueGames =
+          catalogueData.games ?? [];
+
+        // ─────────────────────────────
+        // STEP 3
+        // Merge both result sets
+        // ─────────────────────────────
+
+        const merged = new Map();
+
+        // Autosuggest gets priority.
+        for (const game of suggestions) {
+          if (game?.id) {
+            merged.set(game.id, {
+              ...game,
+              source: "suggest",
+            });
+          }
+        }
+
+        // Add catalogue results that
+        // autosuggest didn't return.
+        for (const game of catalogueGames) {
+          if (game?.id && !merged.has(game.id)) {
+            merged.set(game.id, {
+              ...game,
+              source: "catalogue",
+            });
+          }
+        }
+
+        const candidates = Array.from(
+          merged.values()
+        );
+
+        if (candidates.length === 0) {
+          setXboxGames([]);
+          return;
+        }
+
+        // ─────────────────────────────
+        // STEP 4
+        // Rank results
+        // ─────────────────────────────
+
+        const normalizedQuery =
+          search
+            .trim()
+            .toLowerCase();
+
+        const ranked = candidates
+          .map((game: any, index: number) => {
+            const title =
+              game.title
+                ?.toLowerCase() ?? "";
+
+            const edition =
+              game.edition
+                ?.toLowerCase() ?? "";
+
+            let score = 0;
+
+            // Exact title match
+            if (title === normalizedQuery) {
+              score += 1000;
+            }
+
+            // Title starts with query
+            if (
+              title.startsWith(
+                normalizedQuery
+              )
+            ) {
+              score += 500;
+            }
+
+            // Query appears in title
+            if (
+              title.includes(
+                normalizedQuery
+              )
+            ) {
+              score += 250;
+            }
+
+            // Query appears in edition
+            if (
+              edition.includes(
+                normalizedQuery
+              )
+            ) {
+              score += 100;
+            }
+
+            // Preserve Microsoft's autosuggest
+            // results above catalogue-only results.
+            if (game.source === "suggest") {
+              score += 50;
+            }
+
+            // Earlier Microsoft results get
+            // a slight priority.
+            score += Math.max(
+              0,
+              20 - index
+            );
+
+            return {
+              ...game,
+              score,
+            };
+          })
+          .sort(
+            (a: any, b: any) =>
+              b.score - a.score
+          );
+
+        // ─────────────────────────────
+        // STEP 5
+        // Limit candidates
+        // ─────────────────────────────
+
+        const limited =
+          ranked.slice(0, 15);
+
+        // ─────────────────────────────
+        // STEP 6
+        // Get exact product details
+        // ─────────────────────────────
+
+        const ids = limited
+          .map((game: any) => game.id)
+          .filter(Boolean)
+          .join(",");
+
+        if (!ids) {
+          setXboxGames([]);
+          return;
+        }
+
+        const detailsResponse = await fetch(
+          `/api/xbox/details?ids=${encodeURIComponent(ids)}`,
+          {
+            signal: controller.signal,
+          }
+        );
+
+        if (!detailsResponse.ok) {
+          throw new Error(
+            "Xbox product details failed"
+          );
+        }
+
+        const detailsData =
+          await detailsResponse.json();
+
+        const detailGames =
+          detailsData.games ?? [];
+
+        // ─────────────────────────────
+        // STEP 7
+        // Preserve our ranking
+        // ─────────────────────────────
+
+        const gamesById = new Map(
+          detailGames.map(
+            (game: any) => [
+              game.id,
+              game,
+            ]
+          )
+        );
+
+        const finalGames = limited
+          .map((candidate: any) => {
+            const detailed =
+              gamesById.get(
+                candidate.id
+              );
+
+            if (!detailed) {
+              return null;
+            }
+
+            return {
+              ...detailed,
+
+              // Preserve the candidate's
+              // catalogue information.
+              edition:
+                detailed.edition ??
+                candidate.edition ??
+                detailed.title,
+
+              searchScore:
+                candidate.score,
+            };
+          })
+          .filter(Boolean);
+
+        setXboxGames(finalGames);
       } catch (error: any) {
         if (error.name !== "AbortError") {
-          console.error("Xbox search failed:", error);
+          console.error(
+            "Xbox search failed:",
+            error
+          );
+
           setXboxGames([]);
         }
       } finally {
@@ -149,13 +385,16 @@ export default function Home() {
       }
     };
 
-  const timeout = setTimeout(searchXbox, 300);
+    const timeout = setTimeout(
+      searchXbox,
+      300
+    );
 
-  return () => {
-    clearTimeout(timeout);
-    controller.abort();
-  };
-}, [search, platform]);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [search, platform]);
 
 
   return (
@@ -238,99 +477,138 @@ export default function Home() {
         </div>
 
         {/* Search */}
-        <div className="relative mt-5 w-full max-w-md">
-          <label htmlFor="game-search" className="sr-only">Search for a game</label>
-          <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-zinc-500">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-              <circle cx="11" cy="11" r="6.5" />
-              <path d="m16 16 4.5 4.5" />
-            </svg>
-          </div>
-          <input
-            id="game-search"
-            type="text"
-            placeholder="Search your next game..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="w-full rounded-2xl border border-white/[0.1] bg-white/[0.045] py-4 pl-12 pr-5 text-sm text-white shadow-xl shadow-black/10 outline-none transition placeholder:text-zinc-600 focus:border-[var(--accent)]/60 focus:bg-white/[0.07] focus:ring-4 focus:ring-[rgba(var(--accent-rgb),0.08)]"
-          />
-        </div>
-      </section>
+        <div className="relative mt-5 w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.045] shadow-xl shadow-black/10">
+            <label htmlFor="game-search" className="sr-only">
+              Search for a game
+            </label>
 
-      {/* Search Results */}
-      {search.trim() && (
-        <section className="relative z-20 mx-auto -mt-14 w-full max-w-md px-5 sm:px-8">
+            {/* Search Input */}
+            <div className="relative h-[54px] overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.045] shadow-xl shadow-black/10">
+              <div className="pointer-events-none absolute left-4 top-1/2 flex -translate-y-1/2 items-center text-zinc-500">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="m16 16 4.5 4.5" />
+                </svg>
+              </div>
+
+              <input
+                id="game-search"
+                type="text"
+                placeholder="Search your next game..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="h-full w-full border-0 bg-transparent pl-12 pr-5 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:bg-white/[0.07] focus:ring-4 focus:ring-[rgba(var(--accent-rgb),0.08)]"
+              />
+            </div>
+
+          {/* Search Results */}
+          {search.trim() && (
+            <div className="border-t border-white/[0.08] bg-[#111313]">
           {isSearchingXbox && platform === "xbox" ? (
-            <div className="rounded-2xl border border-white/[0.08] bg-[#111313] px-5 py-6 text-center shadow-2xl">
+            <div className="px-5 py-6 text-center">
               <p className="text-sm text-zinc-500">
                 Searching Xbox Store...
               </p>
             </div>
           ) : filteredGames.length > 0 ? (
-            <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111313] shadow-2xl">
-              {filteredGames.map((game) => (
-                <button
-                  key={game.id}
-                  onClick={() => setSelectedGame(game)}
-                  className="flex w-full items-center justify-between border-b border-white/[0.06] px-5 py-4 text-left transition last:border-b-0 hover:bg-white/[0.05]"
-                >
-                  <div>
-                   <div className="flex items-center gap-3">
-                    {game.image && (
-                      <div className="relative h-12 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-900">
+            <div className="overflow-hidden">
+              {filteredGames.map((game) => {
+                const verdict =
+                  game.discount >= 40
+                    ? {
+                        label: "Great time",
+                        className:
+                          "border-green-400/20 bg-green-400/[0.08] text-green-400",
+                      }
+                    : game.discount >= 20
+                      ? {
+                          label: "Good time",
+                          className:
+                            "border-green-400/20 bg-green-400/[0.06] text-green-400",
+                        }
+                      : game.discount > 0
+                        ? {
+                            label: "Worth waiting",
+                            className:
+                              "border-yellow-400/20 bg-yellow-400/[0.06] text-yellow-400",
+                          }
+                        : {
+                            label: "Wait for sale",
+                            className:
+                              "border-red-400/20 bg-red-400/[0.06] text-red-400",
+                          };
+
+                return (
+                  <button
+                    key={game.id}
+                    onClick={() => {
+                      setSelectedGame(game);
+                      setSearch("");
+                    }}
+                    className="flex w-full items-center gap-4 border-b border-white/[0.06] px-5 py-3.5 text-left transition last:border-b-0 hover:bg-white/[0.04]"
+                  >
+                    {/* Game artwork */}
+                    {game.image ? (
+                      <div className="h-14 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-900">
                         <Image
                           src={game.image}
                           alt=""
-                          fill
-                          className="object-cover"
-                          sizes="36px"
+                          width={40}
+                          height={56}
+                          className="h-full w-full object-cover"
                         />
                       </div>
+                    ) : (
+                      <div className="h-14 w-10 shrink-0 rounded-lg bg-zinc-900" />
                     )}
 
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-white">
+                    {/* Game name & edition */}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-white">
                         {game.title}
                       </p>
 
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {game.platform}
-                      </p>
+                      {game.edition &&
+                        game.edition !== game.title && (
+                          <p className="mt-0.5 truncate text-xs text-zinc-500">
+                            {game.edition}
+                          </p>
+                        )}
                     </div>
-                  </div>
 
-                  <div className="ml-4 shrink-0 text-right">
-                    <p className="text-sm font-semibold text-white">
-                      £{game.price.toFixed(2)}
-                    </p>
-
-                    {game.discount > 0 && (
-                      <p className="mt-1 text-xs font-medium text-green-400">
-                        -{game.discount}%
-                      </p>
-                    )}
-                  </div>
-                  </div>
-
-                  <span className="text-sm font-medium text-zinc-400">
-                    {game.price}
-                  </span>
-                </button>
-              ))}
+                    {/* Verdict */}
+                    <span
+                      className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${verdict.className}`}
+                    >
+                      {verdict.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           ) : (
-            <div className="rounded-2xl border border-white/[0.08] bg-[#111313] px-5 py-6 text-center shadow-2xl">
+            <div className="px-5 py-6 text-center">
               <p className="text-sm text-zinc-400">
                 No games found
               </p>
             </div>
           )}
-        </section>
-      )}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Game Details */}
       {selectedGame && (
-        <section className="mx-auto mt-10 max-w-4xl px-5 sm:px-8">
+        <section className="mx-auto mt-0 max-w-4xl px-5 sm:px-8">
           <div className="rounded-3xl border border-[rgba(var(--accent-rgb),0.3)] bg-[#111313] p-6 shadow-[0_0_30px_rgba(var(--accent-rgb),0.07)] transition-colors duration-500 sm:p-8">
             <div className="grid gap-8 sm:grid-cols-[220px_1fr]">
 
